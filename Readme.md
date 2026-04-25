@@ -21,7 +21,7 @@
 
 1. Download the repository.
 2. Place the `RCD` folder into your `Interface\AddOns\` directory.
-3. Restart your game or reload your UI (`/reload`).
+3. Restart the game.
 
 ## Usage
 

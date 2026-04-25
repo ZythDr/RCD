@@ -27,6 +27,16 @@ local function Print(msg)
     if f then f:AddMessage(addonName .. ": " .. (msg or "nil")) end
 end
 
+-- Utility: Resolve Item ID to Name
+local function ResolveItemName(input)
+    local id = tonumber(input)
+    if id then
+        local name = GetItemInfo(id)
+        if name then return name end
+    end
+    return input
+end
+
 -- Utility: Scan tooltips to check if an item is Conjured
 local tooltipScanner = CreateFrame("GameTooltip", "RCDTooltipScanner", nil, "GameTooltipTemplate")
 tooltipScanner:SetOwner(WorldFrame, "ANCHOR_NONE")
@@ -49,7 +59,6 @@ local function MatchesFilter(link, list, selected, defaultConjuredCheck)
     local id = link:match("item:(%d+)")
     
     if selected == "any" then
-        -- Match any item in the list, or the default check if list is effectively empty of names
         for _, filter in ipairs(list) do
             local filterLower = filter:lower()
             if (name and name:lower() == filterLower) or (id == filter) then
@@ -58,7 +67,6 @@ local function MatchesFilter(link, list, selected, defaultConjuredCheck)
         end
         return defaultConjuredCheck
     else
-        -- Match ONLY the selected item
         local filterLower = selected:lower()
         if (name and name:lower() == filterLower) or (id == selected) then
             return true
@@ -69,8 +77,8 @@ end
 
 -- Utility: Find ONE trash item matching ph_list
 local function FindTrashItem()
-    local list = RCD_LocalConfig and RCD_LocalConfig.ph_list or {}
-    local selected = RCD_LocalConfig and RCD_LocalConfig.ph_selected or "any"
+    local list = RCD_Config.ph_list or {}
+    local selected = RCD_Config.ph_selected or "any"
     for bag = 0, 4 do
         for slot = 1, GetContainerNumSlots(bag) do
             local link = GetContainerItemLink(bag, slot)
@@ -88,8 +96,8 @@ end
 
 -- Utility: Find ALL conjured items matching swap_list
 local function BuildConjQueue()
-    local list = RCD_LocalConfig and RCD_LocalConfig.swap_list or {}
-    local selected = RCD_LocalConfig and RCD_LocalConfig.swap_selected or "any"
+    local list = RCD_Config.swap_list or {}
+    local selected = RCD_Config.swap_selected or "any"
     local queue = {}
     for bag = 0, 4 do
         for slot = 1, GetContainerNumSlots(bag) do
@@ -127,10 +135,14 @@ RCD:SetScript("OnUpdate", function(self, elapsed)
             state = STATE_SEARCH_TRASH
             waitTries = 0
         else
-            local duration = GetTime() - startTime
-            Print(string.format("Process complete. Took %.2f seconds.", duration))
-            self:Hide()
-            if RCDTab then PanelTemplates_DeselectTab(RCDTab) end
+            if RCD_Config.continuous then
+                conjQueue = BuildConjQueue()
+            else
+                local duration = GetTime() - startTime
+                Print(string.format("Process complete. Took %.2f seconds.", duration))
+                self:Hide()
+                if RCDTab then PanelTemplates_DeselectTab(RCDTab) end
+            end
         end
     elseif state == STATE_SEARCH_TRASH then
         local trash = FindTrashItem()
@@ -189,12 +201,12 @@ function StartProcess()
         return
     end
     conjQueue = BuildConjQueue()
-    if #conjQueue == 0 then
+    if #conjQueue == 0 and not RCD_Config.continuous then
         Print("No items found. Check settings.")
         if RCDTab then PanelTemplates_DeselectTab(RCDTab) end
         return
     end
-    Print("Starting for " .. #conjQueue .. " items.")
+    Print("Starting automation. " .. (RCD_Config.continuous and "(Continuous Mode)" or ""))
     startTime = GetTime()
     state = STATE_IDLE
     RCD:Show()
@@ -217,7 +229,11 @@ StaticPopupDialogs["RCD_ADD_PH"] = {
     button1 = "Add", button2 = "Cancel", hasEditBox = true,
     OnAccept = function(self)
         local val = self.editBox:GetText()
-        if val ~= "" then table.insert(RCD_LocalConfig.ph_list, val); Print("Added: "..val) end
+        if val ~= "" then 
+            local resolved = ResolveItemName(val)
+            table.insert(RCD_Config.ph_list, resolved)
+            Print("Added: "..resolved) 
+        end
     end,
     timeout = 0, whileDead = true, hideOnEscape = true,
 }
@@ -227,7 +243,11 @@ StaticPopupDialogs["RCD_ADD_SWAP"] = {
     button1 = "Add", button2 = "Cancel", hasEditBox = true,
     OnAccept = function(self)
         local val = self.editBox:GetText()
-        if val ~= "" then table.insert(RCD_LocalConfig.swap_list, val); Print("Added: "..val) end
+        if val ~= "" then 
+            local resolved = ResolveItemName(val)
+            table.insert(RCD_Config.swap_list, resolved)
+            Print("Added: "..resolved) 
+        end
     end,
     timeout = 0, whileDead = true, hideOnEscape = true,
 }
@@ -260,6 +280,17 @@ local function MenuInitialize(self, level)
         UIDropDownMenu_AddButton(info, level)
         
         info = UIDropDownMenu_CreateInfo()
+        info.text = "Continuous"
+        info.hasArrow = true
+        info.value = "CONTINUOUS"
+        info.func = function() 
+            RCD_Config.continuous = not RCD_Config.continuous 
+            UIDropDownMenu_Refresh(menuFrame)
+        end
+        info.notCheckable = true
+        UIDropDownMenu_AddButton(info, level)
+        
+        info = UIDropDownMenu_CreateInfo()
         info.text = "Placeholder"
         info.hasArrow = true
         info.value = "PH"
@@ -282,22 +313,31 @@ local function MenuInitialize(self, level)
         
     elseif level == 2 then
         local parentValue = UIDROPDOWNMENU_MENU_VALUE
-        if parentValue == "PH" then
-            -- Any option
+        if parentValue == "CONTINUOUS" then
             info = UIDropDownMenu_CreateInfo()
-            info.text = "Any"
-            info.func = function() RCD_LocalConfig.ph_selected = "any" end
-            info.checked = (RCD_LocalConfig.ph_selected == "any")
+            info.text = "|cff00ff00Enabled|r"
+            info.func = function() RCD_Config.continuous = true; UIDropDownMenu_Refresh(menuFrame) end
+            info.checked = RCD_Config.continuous
             UIDropDownMenu_AddButton(info, level)
             
-            for i, v in ipairs(RCD_LocalConfig.ph_list) do
+            info = UIDropDownMenu_CreateInfo()
+            info.text = "|cffff0000Disabled|r"
+            info.func = function() RCD_Config.continuous = false; UIDropDownMenu_Refresh(menuFrame) end
+            info.checked = not RCD_Config.continuous
+            UIDropDownMenu_AddButton(info, level)
+
+        elseif parentValue == "PH" then
+            info = UIDropDownMenu_CreateInfo()
+            info.text = "Any"
+            info.func = function() RCD_Config.ph_selected = "any" end
+            info.checked = (RCD_Config.ph_selected == "any")
+            UIDropDownMenu_AddButton(info, level)
+            
+            for i, v in ipairs(RCD_Config.ph_list) do
                 info = UIDropDownMenu_CreateInfo()
                 info.text = v
-                info.func = function() RCD_LocalConfig.ph_selected = v end
-                info.checked = (RCD_LocalConfig.ph_selected == v)
-                -- Right-click to remove (requires custom handling in 3.3.5, so we use a delete icon/submenu or just simple logic)
-                -- For simplicity in a dropdown, we'll just add a "Delete" button in a submenu or just let it be.
-                -- Let's add an arrow for removal.
+                info.func = function() RCD_Config.ph_selected = v end
+                info.checked = (RCD_Config.ph_selected == v)
                 info.hasArrow = true
                 info.value = {type="PH_REMOVE", index=i, name=v}
                 UIDropDownMenu_AddButton(info, level)
@@ -312,15 +352,15 @@ local function MenuInitialize(self, level)
         elseif parentValue == "SWAP" then
             info = UIDropDownMenu_CreateInfo()
             info.text = "Any"
-            info.func = function() RCD_LocalConfig.swap_selected = "any" end
-            info.checked = (RCD_LocalConfig.swap_selected == "any")
+            info.func = function() RCD_Config.swap_selected = "any" end
+            info.checked = (RCD_Config.swap_selected == "any")
             UIDropDownMenu_AddButton(info, level)
             
-            for i, v in ipairs(RCD_LocalConfig.swap_list) do
+            for i, v in ipairs(RCD_Config.swap_list) do
                 info = UIDropDownMenu_CreateInfo()
                 info.text = v
-                info.func = function() RCD_LocalConfig.swap_selected = v end
-                info.checked = (RCD_LocalConfig.swap_selected == v)
+                info.func = function() RCD_Config.swap_selected = v end
+                info.checked = (RCD_Config.swap_selected == v)
                 info.hasArrow = true
                 info.value = {type="SWAP_REMOVE", index=i, name=v}
                 UIDropDownMenu_AddButton(info, level)
@@ -353,8 +393,8 @@ local function MenuInitialize(self, level)
             info = UIDropDownMenu_CreateInfo()
             info.text = "|cffff0000Remove "..val.name.."|r"
             info.func = function() 
-                table.remove(RCD_LocalConfig.ph_list, val.index)
-                if RCD_LocalConfig.ph_selected == val.name then RCD_LocalConfig.ph_selected = "any" end
+                table.remove(RCD_Config.ph_list, val.index)
+                if RCD_Config.ph_selected == val.name then RCD_Config.ph_selected = "any" end
                 CloseDropDownMenus()
             end
             info.notCheckable = true
@@ -363,8 +403,8 @@ local function MenuInitialize(self, level)
             info = UIDropDownMenu_CreateInfo()
             info.text = "|cffff0000Remove "..val.name.."|r"
             info.func = function() 
-                table.remove(RCD_LocalConfig.swap_list, val.index)
-                if RCD_LocalConfig.swap_selected == val.name then RCD_LocalConfig.swap_selected = "any" end
+                table.remove(RCD_Config.swap_list, val.index)
+                if RCD_Config.swap_selected == val.name then RCD_Config.swap_selected = "any" end
                 CloseDropDownMenus()
             end
             info.notCheckable = true
@@ -379,7 +419,7 @@ local function CreateRCDTab()
 
     local tab = CreateFrame("Button", "RCDTab", GuildBankFrame, "CharacterFrameTabButtonTemplate")
     tab:SetText("RCD")
-    -- Anchor to the bottom right, manually positioned by user
+    -- Anchor to the bottom right
     tab:SetPoint("TOPRIGHT", GuildBankFrame, "BOTTOMRIGHT", -6, 10)
     
     tab:SetScript("OnClick", function(self, button)
@@ -398,13 +438,26 @@ local function CreateRCDTab()
         GameTooltip:AddLine("Left-click to start/stop automation.", 0, 1, 0)
         GameTooltip:AddLine(" ")
         
-        local ph_sel = RCD_LocalConfig.ph_selected
-        local sw_sel = RCD_LocalConfig.swap_selected
+        local ph_sel = RCD_Config.ph_selected
+        if ph_sel == "any" then ph_sel = "Any" end
+        
+        local sw_sel = RCD_Config.swap_selected
+        if sw_sel == "any" then sw_sel = "Any" end
+        
         local dl = (RCD_Config.delay * 1000) .. "ms"
         
         GameTooltip:AddDoubleLine("Placeholder:", ph_sel, 1, 0.82, 0, 1, 1, 1)
         GameTooltip:AddDoubleLine("Swap Target:", sw_sel, 1, 0.82, 0, 1, 1, 1)
         GameTooltip:AddDoubleLine("Delay:", dl, 1, 0.82, 0, 1, 1, 1)
+        
+        local cont_text = RCD_Config.continuous and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
+        GameTooltip:AddDoubleLine("Continuous Mode:", cont_text, 1, 0.82, 0, 1, 1, 1)
+        
+        if RCD_Config.continuous then
+            if RCD:IsVisible() and #conjQueue == 0 then
+                GameTooltip:AddLine("Waiting for more items...", 1, 1, 0)
+            end
+        end
         
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Right-click for options.", 0.5, 0.5, 0.5)
@@ -433,12 +486,33 @@ RCD:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "GUILDBANKFRAME_CLOSED" then
         StopProcess()
     elseif event == "ADDON_LOADED" and arg1 == "RCD" then
-        if not RCD_Config then RCD_Config = { delay = 0.1 } end
-        if not RCD_LocalConfig then 
-            RCD_LocalConfig = { 
-                ph_list = {}, ph_selected = "any",
-                swap_list = {}, swap_selected = "any"
-            } 
+        -- Universal Initialization
+        if not RCD_Config then RCD_Config = {} end
+        if RCD_Config.delay == nil then RCD_Config.delay = 0.1 end
+        if RCD_Config.continuous == nil then RCD_Config.continuous = false end
+        if RCD_Config.ph_list == nil then RCD_Config.ph_list = {} end
+        if RCD_Config.swap_list == nil then RCD_Config.swap_list = {} end
+        if RCD_Config.ph_selected == nil then RCD_Config.ph_selected = "any" end
+        if RCD_Config.swap_selected == nil then RCD_Config.swap_selected = "any" end
+
+        -- Migrate local configs to account-wide if they exist
+        if RCD_LocalConfig then
+            if RCD_LocalConfig.ph_list then
+                for _, v in ipairs(RCD_LocalConfig.ph_list) do
+                    local found = false
+                    for _, ov in ipairs(RCD_Config.ph_list) do if ov == v then found = true end end
+                    if not found then table.insert(RCD_Config.ph_list, v) end
+                end
+            end
+            if RCD_LocalConfig.swap_list then
+                for _, v in ipairs(RCD_LocalConfig.swap_list) do
+                    local found = false
+                    for _, ov in ipairs(RCD_Config.swap_list) do if ov == v then found = true end end
+                    if not found then table.insert(RCD_Config.swap_list, v) end
+                end
+            end
+            -- Clear local config after migration
+            RCD_LocalConfig = nil
         end
     end
 end)
@@ -452,4 +526,4 @@ SlashCmdList["RCD"] = function(msg)
     else Print("Use the RCD tab on the Guild Bank for settings.") end
 end
 
-Print("RCD v3.2 Loaded. Right-click for persistent list management!")
+Print("RCD v3.7 Loaded. Account-wide settings and ID resolution enabled!")

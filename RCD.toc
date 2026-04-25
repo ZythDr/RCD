@@ -4,7 +4,6 @@
 ## Author: ZythDr
 ## Version: 1.0
 ## SavedVariables: RCD_Config
-## SavedVariablesPerCharacter: RCD_LocalConfig
 ## OptionalDeps: ElvUI
 
 RCD.lua

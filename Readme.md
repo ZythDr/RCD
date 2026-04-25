@@ -1,10 +1,10 @@
 # RCD - Rapid Conjured Depositor
 
-**RCD** is a high-performance automation utility for WoW 3.3.5 (specifically tailored for Project Epoch) that streamlines the process of depositing conjured items into the Guild Bank. It utilizes a sophisticated state-machine logic to bypass standard restrictions using placeholder items.
+**RCD** is an addon which greatly speeds up the process of depositing conjured items such as Mage food or Warlock Healthstones to the Guild Bank on Project Epoch.
 
 ## Features
 
-- **Automated Exploitation**: Automatically handles the "deposit -> withdraw -> swap" loop to place conjured items into the bank.
+- **Automated Deposit Loop**: Automatically handles the "deposit -> withdraw -> swap" loop to place conjured items into the bank.
 - **Dynamic Planner**: Scans your bags and builds an optimized processing queue before starting.
 - **Smart Placeholder Search**: Intelligent retry logic ensures the addon waits for your placeholder items to return to your bags before continuing.
 - **Native-Style UI**:

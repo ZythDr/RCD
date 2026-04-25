@@ -5,7 +5,7 @@
 ## Features
 
 - **Automated Deposit Loop**: Automatically handles the "deposit -> withdraw -> swap" loop to place conjured items into the bank.
-- **Continuous Mode EXPERIMENTAL**: Supports infinite deposit loops. When enabled, the addon stays active and automatically detects/deposits new items as they appear in your inventory (ideal for Mage Tables).
+- **Continuous Mode (EXPERIMENTAL)**: Supports infinite deposit loops. When enabled, the addon stays active and automatically detects/deposits new items as they appear in your inventory (ideal for Mage Tables).
 - **Dynamic Planner**: Scans your bags and builds an optimized processing queue before starting.
 - **Smart Placeholder Search**: Intelligent retry logic ensures the addon waits for your placeholder items to return to your bags before continuing.
 - **Native-Style UI**:

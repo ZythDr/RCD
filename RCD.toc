@@ -2,7 +2,7 @@
 ## Title: |cff00ff00RCD|r - Rapid Conjured Depositor
 ## Notes: Speeds up depositing conjured items into the guild bank on Project Epoch.
 ## Author: ZythDr
-## Version: 1.0
+## Version: 1.1
 ## SavedVariables: RCD_Config
 ## OptionalDeps: ElvUI
 
